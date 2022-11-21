@@ -1,7 +1,7 @@
 # text-lm-scorer
 
 ## TODO
-Function that outputs a Casual Language Model output probability for each word (token) in a given sentence. Bonus: for each word (token) return also the word the model considers the most probable. Example:
+Function that outputs a Causal Language Model output probability for each word (token) in a given sentence. Bonus: for each word (token) return also the word the model considers the most probable. Example:
 ```
 lm_scorer('Today is a nice day. Where shall we go?')
 ```
