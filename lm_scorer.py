@@ -1,6 +1,16 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch.nn import Softmax
 import torch
+from typing import List
+
+
+class TokenScore:
+    def __init__(self, token_id: int, string: str, prob: float = None, suggested_strings: List[str] = None, n_words_ahead: int = 0):
+        self.token_id = token_id
+        self.string = string
+        self.prob = prob
+        self.suggested_strings = suggested_strings
+        self.n_words_ahead = n_words_ahead
 
 
 class LMScorer:
@@ -9,26 +19,49 @@ class LMScorer:
         self.model = AutoModelForCausalLM.from_pretrained(self.model_id)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
-        self.index_to_token_dict = {v: k for k, v in self.tokenizer.get_vocab().items()}
 
-    def get_vocab_token(self, index):
-        return self.index_to_token_dict[index]
+    def __call__(self, strings_batch: List[str]):
 
-    def __call__(self, input_string):
-        torch_softmax = Softmax(dim=2)
+        tokenized_strings_batch = self.tokenizer(strings_batch, return_tensors="pt")
+        input_ids_batch = tokenized_strings_batch.input_ids
+        outputs_batch = self.model.forward(input_ids_batch)
+        logits_batch = outputs_batch.logits
+        logits_probs_batch = torch.nn.functional.softmax(logits_batch, dim=2)
+        tokens_scores_batch = []
+        for input_ids, logits_probs in zip(input_ids_batch, logits_probs_batch):
+            token_strings = [self.tokenizer.decode(input_id) for input_id in input_ids]
+            token_scores = []
+            # Probability for the first token cannot be computed since it is not proceeded by any token
+            first_token_score = TokenScore(
+                token_id=input_ids[0],
+                string=token_strings[0]
+            )
+            token_scores.append(first_token_score)
+            for i, (token_id, string, prob) in enumerate(zip(input_ids[1:], token_strings[1:], logits_probs[:-1])):
+                suggested_tokens = torch.topk(prob, 5).indices
+                suggested_strings = [self.tokenizer.decode(suggested_token) for suggested_token in suggested_tokens]
+                token_score = TokenScore(
+                    token_id=token_id,
+                    string=string,
+                    prob=prob[token_id],
+                    suggested_strings=suggested_strings,
+                    n_words_ahead=i+1
+                )
+                token_scores.append(token_score)
+            tokens_scores_batch.append(token_scores)
+        return tokens_scores_batch
 
-        inputs = self.tokenizer(input_string, return_tensors="pt")
-        outputs = self.model(**inputs, labels=inputs["input_ids"])
 
-        sentence_length = len(inputs["input_ids"].flatten())
-        tokens_prob = torch_softmax(outputs.logits)
-
-        actual_token_index = inputs["input_ids"].flatten()[1:].tolist()
-        actual_token_p = tokens_prob[0, range(0, sentence_length - 1), actual_token_index].tolist()
-        best_token_index = torch.max(tokens_prob, 2).indices.flatten().tolist()
-        best_token_p = torch.max(tokens_prob, 2).values.flatten().tolist()
-
-        return zip(
-            [self.get_vocab_token(index) for index in actual_token_index], actual_token_p,
-            [self.get_vocab_token(index) for index in best_token_index], best_token_p
-        )
+if __name__ == '__main__':
+    lm_scorer = LMScorer()
+    texts = [
+        'Today is a beautiful day, what shall we do?'
+    ]
+    scored_texts = lm_scorer(texts)
+    for text, scored_text in zip(texts, scored_texts):
+        print(f'\n{text}')
+        for token_score in scored_text:
+            if token_score.prob is None:
+                print(f'{token_score.string.strip()}')
+            else:
+                print(f'{token_score.string.strip()}: {token_score.prob * 100 / token_score.n_words_ahead}% ({token_score.suggested_strings})')
