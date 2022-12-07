@@ -1,24 +1,21 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from typing import List
-from pydantic import BaseModel
+from utils.scorer import ScorerInterface
 
 
-class TokenScore(BaseModel):
-    token_id: int
-    string: str
-    prob: float = None
-    suggested_strings: List[str] = None
-    n_words_ahead: int = 0
+class Thresholds:
+    HIGH = 1e-06
+    MED = 1e-05
 
 
-class LMScorer:
-    def __init__(self, model_id='readerbench/RoGPT2-medium'):
-        self.model_id = model_id
+class GPTScorer(ScorerInterface):
+    def __init__(self):
+        self.model_id = 'readerbench/RoGPT2-medium'
         self.model = AutoModelForCausalLM.from_pretrained(self.model_id)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
-    def __call__(self, strings_batch: List[str]):
+    def score(self, strings_batch: List[str]):
         tokenized_strings_batch = self.tokenizer(strings_batch, return_tensors="pt")
 
         input_ids_batch = tokenized_strings_batch.input_ids
@@ -32,7 +29,7 @@ class LMScorer:
             token_scores = []
 
             # Probability for the first token cannot be computed since it is not proceeded by any token
-            first_token_score = TokenScore(
+            first_token_score = ScorerInterface.TokenScore(
                 token_id=token_ids[0],
                 string=token_strings[0]
             )
@@ -42,7 +39,7 @@ class LMScorer:
                 suggested_tokens = torch.topk(prob, 5).indices
                 suggested_strings = [self.tokenizer.decode(suggested_token) for suggested_token in suggested_tokens]
 
-                token_scores.append(TokenScore(
+                token_scores.append(ScorerInterface.TokenScore(
                     token_id=token_id,
                     string=string,
                     prob=prob[token_id],
@@ -53,3 +50,11 @@ class LMScorer:
             tokens_scores_batch.append(token_scores)
 
         return tokens_scores_batch
+
+    @staticmethod
+    def high_threshold(prob):
+        return prob <= Thresholds.HIGH
+
+    @staticmethod
+    def med_threshold(prob):
+        return Thresholds.HIGH < prob <= Thresholds.MED
