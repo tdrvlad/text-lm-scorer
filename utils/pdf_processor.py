@@ -5,7 +5,7 @@ from utils.gpt_scorer import GPTScorer
 from utils.bert_scorer import BERTScorer
 import itertools
 from tqdm import tqdm
-from typing import Union
+from typing import Union, List, Tuple
 
 
 class Color:
@@ -16,18 +16,18 @@ class Color:
 class WordObject(BaseModel):
     string: str
 
-    quads: tuple[float, float, float, float]
+    quads: Tuple[float, float, float, float]
     page_in_doc: int
     paragraph_in_page: int
     sentence_in_paragraph: int
     word_in_sentence: int
 
-    token_scores: list[ScorerInterface.TokenScore] = list()
+    token_scores: List[ScorerInterface.TokenScore] = list()
 
 
 class PDFProcessor:
     __filepath: str
-    __words: list[WordObject]
+    __words: List[WordObject]
     __scorer: Union[GPTScorer, BERTScorer]
 
     def __init__(self, filepath: str, scorer: Union[GPTScorer, BERTScorer]):

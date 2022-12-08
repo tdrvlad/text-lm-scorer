@@ -18,12 +18,13 @@ def pretty_print(texts, scored_texts):
 
 
 if __name__ == '__main__':
-    text = ['Vreau sa ies afara. Vrei sa mergem la o plimbare?']
+    text = ["Războiul cel Mare, Războiul Nasiunilor, denumit, în timpul celui de Al Patrulea Război Mondial, Primul Război Mondial, a fost un conflict militar de dimensiuni mondiale."]
 
-    print('GPT Scores')
-    gpt_socrer = GPTScorer()
-    scored_texts = gpt_socrer.score(text)
-    pretty_print(text, scored_texts)
+    #
+    # print('GPT Scores')
+    # gpt_socrer = GPTScorer()
+    # scored_texts = gpt_socrer.score(text)
+    # pretty_print(text, scored_texts)
 
     print('BERT Scores')
     bert_scorer = BERTScorer()

@@ -11,7 +11,7 @@ class Thresholds:
 
 class BERTScorer(ScorerInterface):
     def __init__(self):
-        self.model_id = 'readerbench/RoBERT-base'
+        self.model_id = 'dumitrescustefan/bert-base-romanian-cased-v1'
         self.model = BertForMaskedLM.from_pretrained(self.model_id, return_dict=True)
         self.tokenizer = BertTokenizer.from_pretrained(self.model_id)
 
@@ -21,7 +21,7 @@ class BERTScorer(ScorerInterface):
 
         outputs_batch = self.model.forward(input_ids_batch)
         logits_batch = outputs_batch[0]
-        probs_batch = torch.nn.functional.softmax(logits_batch, dim=2)
+        probs_batch = torch.nn.functional.softmax(logits_batch, dim=-1)
 
         tokens_scores_batch = []
         for token_ids, token_probs in zip(input_ids_batch, probs_batch):
@@ -39,7 +39,7 @@ class BERTScorer(ScorerInterface):
 
                 token_scores.append(ScorerInterface.TokenScore(
                     token_id=int(token_id),
-                    string=string.replace(" ", "").removeprefix('##'),  # join letters & remove ## in split words
+                    string=string.replace(" ", "").replace('##', ''),  # join letters & remove ## in split words
                     prob=float(prob[token_id]),
                     suggested_strings=[string.replace(" ", "") for string in suggested_strings],
                     n_words_ahead=i+1
