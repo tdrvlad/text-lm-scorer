@@ -28,4 +28,3 @@ class ScorerInterface:
     @staticmethod
     def replace_cedilla_letters(string):
         return string.replace("ţ", "ț").replace("ş", "ș").replace("Ţ", "Ț").replace("Ş", "Ș")
-

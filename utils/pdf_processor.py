@@ -4,7 +4,6 @@ from utils.scorer import ScorerInterface
 from utils.gpt_scorer import GPTScorer
 from utils.bert_scorer import BERTScorer
 import itertools
-from tqdm import tqdm
 from typing import Union
 
 
@@ -25,16 +24,26 @@ class WordObject(BaseModel):
     token_scores: list[ScorerInterface.TokenScore] = list()
 
 
+class ScorerType:
+    BERT = 'BERT'
+    GPT = 'GPT'
+
+
 class PDFProcessor:
     __filepath: str
     __words: list[WordObject]
     __scorer: Union[GPTScorer, BERTScorer]
 
-    def __init__(self, filepath: str, scorer: Union[GPTScorer, BERTScorer]):
+    def __init__(self, filepath: str, scorer: ScorerType = ScorerType.BERT):
         self.__filepath = filepath
         self.__doc = fitz.open(filepath)
         self.__words = self.retrieve_words_data()
-        self.__scorer = scorer
+
+        self.scorer = None
+        if scorer == ScorerType.BERT:
+            self.__scorer = BERTScorer()
+        elif scorer == ScorerType.GPT:
+            self.__scorer = GPTScorer()
 
     def get_words(self):
         return self.__words
@@ -61,14 +70,20 @@ class PDFProcessor:
 
         return doc_words
 
-    def score_paragraphs(self):
+    def get_wait_time(self):  # TODO: save this as a class attribute to save time
+        return len(self.get_paragraphs()) - 1
+
+    def score_paragraphs(self, with_yield=False):
         paragraphs = self.get_paragraphs()
 
         all_token_scores = []
-        for paragraph in tqdm(paragraphs):
+        for index, paragraph in enumerate(paragraphs):
             paragraph_scores = self.__scorer.score(paragraph)
             token_scores = list(itertools.chain(*paragraph_scores))  # flatten list
             all_token_scores.extend(token_scores)
+
+            if with_yield:
+                yield index
 
         self.match_token_scores_to_words(all_token_scores)
 

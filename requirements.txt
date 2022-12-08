@@ -2,3 +2,4 @@ transformers
 torch
 pymupdf
 pydantic
+streamlit

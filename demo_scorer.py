@@ -18,7 +18,7 @@ def pretty_print(texts, scored_texts):
 
 
 if __name__ == '__main__':
-    text = ['Vreau sa ies afara. Vrei sa mergem la o plimbare?']
+    text = ['Primul razboi mondial a inceput in anul 2000.']
 
     print('GPT Scores')
     gpt_socrer = GPTScorer()
