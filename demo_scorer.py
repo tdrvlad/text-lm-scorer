@@ -13,19 +13,16 @@ def pretty_print(texts, scored_texts):
             else:
                 print(f'{token_score.string.strip()}: '
                       # f'{token_score.prob}% '
-                      f'{token_score.prob * 100 / token_score.n_words_ahead:.2f}% '
+                      f'{token_score.prob * 100:.2f}% '
                       f'({token_score.suggested_strings})')
 
 
 if __name__ == '__main__':
-    text = ['Primul razboi mondial a inceput in anul 2000.']
+    text = ['Primul Război Mondial a început în anul 1923.']
 
-    print('GPT Scores')
-    gpt_socrer = GPTScorer()
-    scored_texts = gpt_socrer.score(text)
-    pretty_print(text, scored_texts)
 
     print('BERT Scores')
     bert_scorer = BERTScorer()
+
     scored_texts = bert_scorer.score(text)
     pretty_print(text, scored_texts)

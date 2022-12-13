@@ -4,7 +4,7 @@ from utils.scorer import ScorerInterface
 from utils.gpt_scorer import GPTScorer
 from utils.bert_scorer import BERTScorer
 import itertools
-from typing import Union
+from typing import Union, Tuple, List
 
 
 class Color:
@@ -15,13 +15,13 @@ class Color:
 class WordObject(BaseModel):
     string: str
 
-    quads: tuple[float, float, float, float]
+    quads: Tuple[float, float, float, float]
     page_in_doc: int
     paragraph_in_page: int
     sentence_in_paragraph: int
     word_in_sentence: int
 
-    token_scores: list[ScorerInterface.TokenScore] = list()
+    token_scores: List[ScorerInterface.TokenScore] = list()
 
 
 class ScorerType:
@@ -31,7 +31,7 @@ class ScorerType:
 
 class PDFProcessor:
     __filepath: str
-    __words: list[WordObject]
+    __words: List[WordObject]
     __scorer: Union[GPTScorer, BERTScorer]
 
     def __init__(self, filepath: str, scorer: ScorerType = ScorerType.BERT):
@@ -39,11 +39,14 @@ class PDFProcessor:
         self.__doc = fitz.open(filepath)
         self.__words = self.retrieve_words_data()
 
-        self.scorer = None
-        if scorer == ScorerType.BERT:
-            self.__scorer = BERTScorer()
-        elif scorer == ScorerType.GPT:
-            self.__scorer = GPTScorer()
+        self.__scorer = BERTScorer()
+
+
+        # self.scorer = None
+        # if scorer == ScorerType.BERT:
+        #     self.__scorer = BERTScorer()
+        # elif scorer == ScorerType.GPT:
+        #     self.__scorer = GPTScorer()
 
     def get_words(self):
         return self.__words
@@ -78,7 +81,7 @@ class PDFProcessor:
 
         all_token_scores = []
         for index, paragraph in enumerate(paragraphs):
-            paragraph_scores = self.__scorer.score(paragraph)
+            paragraph_scores = self.__scorer.score([paragraph])[0]
             token_scores = list(itertools.chain(*paragraph_scores))  # flatten list
             all_token_scores.extend(token_scores)
 
