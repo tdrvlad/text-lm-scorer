@@ -21,7 +21,8 @@ class WordObject(BaseModel):
     sentence_in_paragraph: int
     word_in_sentence: int
 
-    token_scores: List[ScorerInterface.TokenScore] = list()
+    word_score: ScorerInterface.WordScore = None
+
 
 
 class ScorerType:
@@ -30,30 +31,22 @@ class ScorerType:
 
 
 class PDFProcessor:
-    __filepath: str
-    __words: List[WordObject]
-    __scorer: Union[GPTScorer, BERTScorer]
+    filepath: str
+    words: List[WordObject]
+    scorer: Union[GPTScorer, BERTScorer]
 
     def __init__(self, filepath: str, scorer: ScorerType = ScorerType.BERT):
-        self.__filepath = filepath
-        self.__doc = fitz.open(filepath)
-        self.__words = self.retrieve_words_data()
-
-        self.__scorer = BERTScorer()
-
-
-        # self.scorer = None
-        # if scorer == ScorerType.BERT:
-        #     self.__scorer = BERTScorer()
-        # elif scorer == ScorerType.GPT:
-        #     self.__scorer = GPTScorer()
+        self.filepath = filepath
+        self.doc = fitz.open(filepath)
+        self.words = self.retrieve_words_data()
+        self.scorer = BERTScorer()
 
     def get_words(self):
-        return self.__words
+        return self.words
 
     def retrieve_words_data(self):
         doc_words = []
-        pages = self.__doc.pages(start=None, stop=None)  # note: can't store pages inside the object
+        pages = self.doc.pages(start=None, stop=None)  # note: can't store pages inside the object
 
         for page_index, page in enumerate(pages):
             raw_words = page.get_text("words")
@@ -79,25 +72,26 @@ class PDFProcessor:
     def score_paragraphs(self, with_yield=False):
         paragraphs = self.get_paragraphs()
 
-        all_token_scores = []
+        all_word_scores = []
         for index, paragraph in enumerate(paragraphs):
-            paragraph_scores = self.__scorer.score([paragraph])[0]
-            token_scores = list(itertools.chain(*paragraph_scores))  # flatten list
-            all_token_scores.extend(token_scores)
+            paragraph_scores = self.scorer.score_text(paragraph)
+            all_word_scores.extend(paragraph_scores)
 
             if with_yield:
                 yield index
 
-        self.match_token_scores_to_words(all_token_scores)
+        assert len(self.words) == len(all_word_scores), 'Different number of words and word scores'
+        for w, ws in zip(self.words, all_word_scores):
+            w.word_score = ws
 
     # TODO: this can be done a lot more efficient
     #   * note: this is currently based on the fact that the word list is in order
     def get_paragraphs(self):
-        current_paragraph = self.__words[0].paragraph_in_page
+        current_paragraph = self.words[0].paragraph_in_page
         paragraph_text = ''
         paragraphs = []
 
-        for word in self.__words:
+        for word in self.words:
             if word.paragraph_in_page == current_paragraph:
                 paragraph_text += f' {word.string}'
             else:
@@ -109,58 +103,34 @@ class PDFProcessor:
 
         return paragraphs
 
-    # TODO: take into consideration the issues below
-    #  * word_buffer & prefix - exact matching for now (doesn't handle ANY noise)
-    #  * always takes it from the FIRST word until the LAST
-    #  * currently doing UNCASED matching
-    #  * if it can't find a match in the word it is stuck, doesn't move to the next word: can potentially fix this
-    def match_token_scores_to_words(self, token_scores):
-        current_token = token_scores[0]
-        token_index = 0
-        no_of_token_scores = len(token_scores)
-
-        for word in self.__words:
-            word_buffer = word.string.strip()
-            while word_buffer:
-                prefix = current_token.string.strip()
-
-                if PDFProcessor.prefix_in_word_buffered_uncased(word_buffer, prefix):
-                    word.token_scores.append(current_token)
-                    word_buffer = word_buffer[len(prefix):]
-
-                    token_index += 1
-                    if token_index >= no_of_token_scores:
-                        return
-                    current_token = token_scores[token_index]
 
     @staticmethod
     def prefix_in_word_buffered_uncased(word_buffer, prefix):
         return word_buffer.lower().startswith(prefix.lower())
 
     def get_word_quads_with_probabilities(self, page, check_threshold):
-        return [word.quads for word in self.__words
+        return [word.quads for word in self.words
                 if word.page_in_doc == page and
-                word.token_scores and
-                word.token_scores[0].prob and  # this check is because 1st word prob is None
-                check_threshold(word.token_scores[0].prob)]  # this only takes first token prob into consideration
+                word.word_score is not None and
+                check_threshold(word.word_score.prob)]  # this only takes first token prob into consideration
 
     def highlight_mistakes(self):
 
-        pages = self.__doc.pages(start=None, stop=None)  # note: can't store pages inside the object
+        pages = self.doc.pages(start=None, stop=None)  # note: can't store pages inside the object
 
         for page in pages:
-            high_mistake_words_quads = self.get_word_quads_with_probabilities(page.number, self.__scorer.high_threshold)
+            high_mistake_words_quads = self.get_word_quads_with_probabilities(page.number, self.scorer.high_threshold)
             highlight = page.add_highlight_annot(high_mistake_words_quads)
             highlight.set_colors({"stroke": Color.RED})
             highlight.update()
 
-            med_mistake_words_quads = self.get_word_quads_with_probabilities(page.number, self.__scorer.med_threshold)
+            med_mistake_words_quads = self.get_word_quads_with_probabilities(page.number, self.scorer.med_threshold)
             highlight = page.add_highlight_annot(med_mistake_words_quads)
             highlight.set_colors({"stroke": Color.YELLOW})
             highlight.update()
 
     def get_scorer(self):
-        return self.__scorer
+        return self.scorer
 
     def save(self, filename):
-        self.__doc.save(filename)
+        self.doc.save(filename)

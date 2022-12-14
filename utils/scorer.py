@@ -6,10 +6,13 @@ class ScorerInterface:
 
     class TokenScore(BaseModel):
         token_id: int
+        prob: float = None
+        suggested_strings: List[str] = None
+
+    class WordScore(BaseModel):
         string: str
         prob: float = None
         suggested_strings: List[str] = None
-        n_words_ahead: int = 0
 
     # TODO: fix this - doesn't work with list of strings yet, but with one string
     def score(self, strings_batch: List[str]) -> List[TokenScore]:

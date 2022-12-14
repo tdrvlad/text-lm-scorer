@@ -2,11 +2,11 @@ from transformers import BertForMaskedLM, BertTokenizer
 import torch
 from typing import List
 from utils.scorer import ScorerInterface
-
+import itertools
 
 class Thresholds:
     HIGH = 0.8
-    MED = 0.9
+    MED = 0.95
 
 
 class BERTScorer(ScorerInterface):
@@ -16,8 +16,8 @@ class BERTScorer(ScorerInterface):
         self.model = BertForMaskedLM.from_pretrained(self.model_id, return_dict=True)
         self.tokenizer = BertTokenizer.from_pretrained(self.model_id)
 
-    def _score_text(self, text: str):
-        input_ids = self.tokenizer(text, return_tensors="pt").input_ids[0]
+    def score_text(self, text: str):
+        input_ids = self.tokenizer([text], return_tensors="pt").input_ids[0]
 
         input_ids_batch = input_ids.repeat(len(input_ids), 1)
         tokens_mask_batch = 1 - torch.eye(len(input_ids))
@@ -34,7 +34,6 @@ class BERTScorer(ScorerInterface):
         token_scores = []
         for input_id, token_logits in zip(input_ids, tokens_logits):
             probabilities = torch.nn.functional.softmax(token_logits, dim=-1)
-            token = self.tokenizer.decode(input_id)
             token_probability = probabilities[input_id]
 
             suggested_input_ids = torch.topk(probabilities, 5).indices
@@ -42,51 +41,33 @@ class BERTScorer(ScorerInterface):
 
             token_score = ScorerInterface.TokenScore(
                 token_id=int(input_id),
-                string=token.replace(" ", "").replace('##', ''),  # join letters & remove ## in split words
                 prob=float(token_probability),
-                suggested_strings=[suggested_token.replace(" ", "") for suggested_token in suggested_tokens],
-                n_words_ahead=len(token_scores) + 1
+                suggested_strings=[suggested_token.replace(" ", "") for suggested_token in suggested_tokens]
             )
             token_scores.append(token_score)
-        return token_scores
 
-    def score(self, texts_batch: List[str]):
-        token_scores_batch = [self._score_text(text) for text in texts_batch]
-        return token_scores_batch
+        word_scores = self.token_scores_to_word_scores(token_scores)
+        return word_scores
 
-        # # To REDO
-        # tokenized_strings_batch = self.tokenizer(strings_batch, return_tensors="pt")
-        # input_ids_batch = tokenized_strings_batch.input_ids
-        #
-        # outputs_batch = self.model.forward(input_ids_batch)
-        # logits_batch = outputs_batch[0]
-        # probs_batch = torch.nn.functional.softmax(logits_batch, dim=2)
-        #
-        # tokens_scores_batch = []
-        # for token_ids, token_probs in zip(input_ids_batch, probs_batch):
-        #     token_strings = [self.tokenizer.decode(input_id) for input_id in token_ids]
-        #     token_scores = []
-        #
-        #     # remove [CLS] and [SEP] tokens
-        #     token_ids = token_ids[1:-1]
-        #     token_strings = token_strings[1:-1]
-        #     token_probs = token_probs[1:-1]
-        #
-        #     for i, (token_id, string, prob) in enumerate(zip(token_ids, token_strings, token_probs)):
-        #         suggested_tokens = torch.topk(prob, 5).indices
-        #         suggested_strings = [self.tokenizer.decode(suggested_token) for suggested_token in suggested_tokens]
-        #
-        #         token_scores.append(ScorerInterface.TokenScore(
-        #             token_id=int(token_id),
-        #             string=string.replace(" ", "").replace('##', ''),  # join letters & remove ## in split words
-        #             prob=float(prob[token_id]),
-        #             suggested_strings=[string.replace(" ", "") for string in suggested_strings],
-        #             n_words_ahead=i+1
-        #         ))
-        #
-        #     tokens_scores_batch.append(token_scores)
-        #
-        # return tokens_scores_batch
+    def token_scores_to_word_scores(self, token_scores):
+        word_scores = []
+        token_scores = token_scores[1:-1]  # Ignore BOS and EOS tokens
+        text = self.tokenizer.decode([tkn_score.token_id for tkn_score in token_scores])
+        words = [w for w in text.split(' ') if len(w)]
+        current_index = 0
+        for word in words:
+            tokenized_word = self.tokenizer.encode(word)[1:-1] # Ignore BOS and EOS tokens
+            n_word_tokens = len(tokenized_word)
+            current_word_token_scores = token_scores[current_index: current_index + n_word_tokens]
+            word_score = ScorerInterface.WordScore(
+                string=word,
+                prob=sum([ts.prob for ts in current_word_token_scores]) / len(current_word_token_scores),
+                suggested_strings=list(itertools.chain.from_iterable([ts.suggested_strings for ts in current_word_token_scores]))
+            )
+            word_scores.append(word_score)
+            current_index += n_word_tokens
+        return word_scores
+
 
     @staticmethod
     def high_threshold(prob):  # p < 0.8
@@ -95,3 +76,9 @@ class BERTScorer(ScorerInterface):
     @staticmethod
     def med_threshold(prob):  # 0.8 < p < 0.9
         return Thresholds.HIGH < prob <= Thresholds.MED
+
+if __name__ == '__main__':
+    text = 'Primul Război Mondial a început în anul 1980 și a durat 40 de ani.'
+    bert_scorer = BERTScorer()
+    token_scores = bert_scorer.score_text(text)
+    bert_scorer.token_scores_to_word_scores(token_scores)
