@@ -26,10 +26,11 @@ class BERTScorer(ScorerInterface):
 
         with torch.no_grad():
             # Process them individually for not causing OOM
+            # logits_batch = self.model(input_ids_batch).logits if we had the memory
             logits_batch = [self.model(torch.unsqueeze(input_ids, 0)).logits[0] for input_ids in input_ids_batch]
 
         logits_batch = torch.stack(logits_batch)
-        tokens_logits = torch.diagonal(logits_batch).swapaxes(0,1)
+        tokens_logits = torch.diagonal(logits_batch).swapaxes(0, 1)
 
         token_scores = []
         for input_id, token_logits in zip(text_input_ids, tokens_logits):
