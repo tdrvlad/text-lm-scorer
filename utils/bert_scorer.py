@@ -1,15 +1,16 @@
 from transformers import BertForMaskedLM, BertTokenizer
 import torch
 from typing import List
-from utils.scorer import ScorerInterface
+from utils.scorer import TokenScore, TokenProb, WordScore, compute_score
 import itertools
 
 class Thresholds:
-    HIGH = 0.8
-    MED = 0.95
+    HIGH = 0.1
+    MED = 0.4
 
+top_k = 10
 
-class BERTScorer(ScorerInterface):
+class BERTScorer:
     def __init__(self, model_id='dumitrescustefan/bert-base-romanian-cased-v1'):
 
         self.model_id = model_id
@@ -35,15 +36,44 @@ class BERTScorer(ScorerInterface):
         token_scores = []
         for input_id, token_logits in zip(text_input_ids, tokens_logits):
             probabilities = torch.nn.functional.softmax(token_logits, dim=-1)
+            # probabilities = torch.nn.functional.normalize(token_logits, dim=-1)
+
+            token_string = self.tokenizer.decode([input_id])
+
             token_probability = probabilities[input_id]
+            sorted_probs, sorted_ids = torch.sort(probabilities, descending=True)
 
-            suggested_input_ids = torch.topk(probabilities, 5).indices
-            suggested_tokens = [self.tokenizer.decode(inp_id) for inp_id in suggested_input_ids]
+            sorted_strings = self.tokenizer.decode(sorted_ids[:top_k])
 
-            token_score = ScorerInterface.TokenScore(
+            score = token_probability
+
+            token_index = (sorted_ids == input_id).nonzero().item()
+            probs_before = sorted_probs[:token_index]
+
+            if len(probs_before):
+                mean_diff = torch.mean(probs_before - token_probability)
+                score = (score + (1 - mean_diff)) / 2
+
+
+            token_index = (sorted_ids == input_id).nonzero().item()
+
+            # top_k_strings = self.tokenizer.decode(sorted_ids[:5])
+            #
+            # top_k_ids = torch.topk(probabilities, top_k).indices
+            # top_k_probs = torch.topk(probabilities, top_k).values
+            # top_k_strings = [self.tokenizer.decode(tk_id).replace(" ", "") for tk_id in top_k_ids]
+            #
+            suggested_tokens = [TokenProb(token_id=tk_id, prob=prob) for tk_id, prob in zip(sorted_ids[:top_k], sorted_probs[:top_k])]
+            #
+            # rel_probs = top_k_probs - token_probability
+            # abs_probs = torch.abs(rel_probs)
+            # # norm_rel_top_k_probs = torch.nn.functional.normalize(abs_probs, dim=-1)
+            # score = 1 - min(abs_probs)
+
+            token_score = TokenScore(
                 token_id=int(input_id),
-                prob=float(token_probability),
-                suggested_strings=[suggested_token.replace(" ", "") for suggested_token in suggested_tokens]
+                score=score,
+                suggested_tokens=suggested_tokens
             )
             token_scores.append(token_score)
 
@@ -60,11 +90,10 @@ class BERTScorer(ScorerInterface):
             tokenized_word = self.tokenizer.encode(word)[1:-1] # Ignore BOS and EOS tokens
             n_word_tokens = len(tokenized_word)
             current_word_token_scores = token_scores[current_index: current_index + n_word_tokens]
-            word_score = ScorerInterface.WordScore(
+            word_score = WordScore(
                 string=word,
-                prob=sum([ts.prob for ts in current_word_token_scores]) / len(current_word_token_scores),
-                # suggested_strings=list(itertools.chain.from_iterable([ts.suggested_strings for ts in current_word_token_scores]))
-                suggested_strings=current_word_token_scores[0].suggested_strings
+                score=sum([ts.score for ts in current_word_token_scores]) / len(current_word_token_scores),
+                suggested_strings=[self.tokenizer.decode([tp.token_id]) for tp in current_word_token_scores[0].suggested_tokens]
             )
             word_scores.append(word_score)
             current_index += n_word_tokens

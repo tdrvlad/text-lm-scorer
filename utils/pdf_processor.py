@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 import fitz
-from utils.scorer import ScorerInterface
+from utils.scorer import WordScore
+
 from utils.gpt_scorer import GPTScorer
 from utils.bert_scorer import BERTScorer
 import itertools
@@ -21,8 +22,46 @@ class WordObject(BaseModel):
     sentence_in_paragraph: int
     word_in_sentence: int
 
-    word_score: ScorerInterface.WordScore = None
+    word_score: WordScore = None
 
+DELIMITERS = ['.', '...', '!', '?']
+
+
+def word_ends_in_punctuation(word_obj: WordObject, punctuation=DELIMITERS):
+    """
+    Whether WordObject ends with a punctuation string.
+    """
+    # Case: word ends in punctuation
+    for punct in punctuation:
+        if word_obj.string.endswith(punct):
+            return True
+    return False
+
+def word_starts_with_capital_letter(word_obj: WordObject):
+    """
+    Whether WordObject starts with a capital letter.
+    """
+    return word_obj.string[0].isupper()
+
+def words_on_separate_lines(word_obj_1: WordObject, word_obj_2: WordObject):
+    return word_obj_1.paragraph_in_page != word_obj_2.paragraph_in_page
+
+
+def sentence_split_words_condition(word_obj_1: WordObject, word_obj_2: WordObject):
+    """
+    Heuristic method for deciding whether there is a sentence split between word_obj_1 and word_obj_2.
+    """
+    # Case: word ends in punctuation AND following word starts with capital letter
+    if word_ends_in_punctuation(word_obj_1) and word_starts_with_capital_letter(word_obj_2):
+        return True
+
+    # Case: words are on separate lines and second word starts with capital letter
+    if words_on_separate_lines(word_obj_1, word_obj_2) and word_starts_with_capital_letter(word_obj_2):
+        return True
+
+    # TODO Add other heuristics TODO
+
+    return False
 
 
 class ScorerType:
@@ -50,6 +89,7 @@ class PDFProcessor:
 
         for page_index, page in enumerate(pages):
             raw_words = page.get_text("words")
+
             processed_words = []
 
             for raw_word in raw_words:
@@ -66,42 +106,67 @@ class PDFProcessor:
 
         return doc_words
 
-    def get_wait_time(self):  # TODO: save this as a class attribute to save time
-        return len(self.get_paragraphs()) - 1
+    # def get_wait_time(self):  # TODO: save this as a class attribute to save time
+    #     return len(self.get_paragraphs()) - 1
 
-    def score_paragraphs(self, with_yield=False):
-        paragraphs = self.get_paragraphs()
+    # def score_paragraphs(self, with_yield=False):
+    #     paragraphs = self.get_paragraphs()
+    #
+    #     all_word_scores = []
+    #     for index, paragraph in enumerate(paragraphs):
+    #         paragraph_scores = self.scorer.score_text(paragraph)
+    #         all_word_scores.extend(paragraph_scores)
+    #
+    #         if with_yield:
+    #             yield index
+    #
+    #     assert len(self.words) == len(all_word_scores), f'Different number of words and word scores: {len(self.words)} {len(all_word_scores)}'
+    #     for w, ws in zip(self.words, all_word_scores):
+    #         w.word_score = ws
 
-        all_word_scores = []
-        for index, paragraph in enumerate(paragraphs):
-            paragraph_scores = self.scorer.score_text(paragraph)
-            all_word_scores.extend(paragraph_scores)
+    def get_sentences(self):
+        """ Returns the pdf sentences as a list of lists of WordObjects."""
+        sentences = []
+        current_sentence = []
+        for word_1, word_2 in zip(self.words[:-1], self.words[1:]):
+            current_sentence.append(word_1)
+            if sentence_split_words_condition(word_1, word_2):
+                sentences.append(current_sentence)
+                current_sentence = []
+        current_sentence.append(self.words[-1])
+        sentences.append(current_sentence)
+        return sentences
 
-            if with_yield:
-                yield index
+    def get_sentence_string(self, words: List[WordObject]):
+        """ Concatenate the strings in the WordObjects to form the sentence as string."""
+        return ' '.join([w.string for w in words])
 
-        assert len(self.words) == len(all_word_scores), 'Different number of words and word scores'
-        for w, ws in zip(self.words, all_word_scores):
-            w.word_score = ws
+    def score_sentences(self):
+        sentences = self.get_sentences()
+        for sentence in sentences:
+            sentence_string = self.get_sentence_string(sentence)
+            sentence_scores = self.scorer.score_text(sentence_string)
+            for w, ws in zip(sentence, sentence_scores):
+                w.word_score = ws
 
-    # TODO: this can be done a lot more efficient
-    #   * note: this is currently based on the fact that the word list is in order
-    def get_paragraphs(self):
-        current_paragraph = self.words[0].paragraph_in_page
-        paragraph_text = ''
-        paragraphs = []
 
-        for word in self.words:
-            if word.paragraph_in_page == current_paragraph:
-                paragraph_text += f' {word.string}'
-            else:
-                paragraphs.append(paragraph_text)
-                paragraph_text = word.string
-                current_paragraph = word.paragraph_in_page
 
-        paragraphs.append(paragraph_text)  # append last paragraph
-
-        return paragraphs
+    # def get_paragraphs(self):
+    #     current_paragraph = self.words[0].paragraph_in_page
+    #     paragraph_text = ''
+    #     paragraphs = []
+    #
+    #     for word in self.words:
+    #         if word.paragraph_in_page == current_paragraph:
+    #             paragraph_text += f' {word.string}'
+    #         else:
+    #             paragraphs.append(paragraph_text)
+    #             paragraph_text = word.string
+    #             current_paragraph = word.paragraph_in_page
+    #
+    #     paragraphs.append(paragraph_text)  # append last paragraph
+    #
+    #     return paragraphs
 
 
     @staticmethod
@@ -112,7 +177,7 @@ class PDFProcessor:
         return [word.quads for word in self.words
                 if word.page_in_doc == page and
                 word.word_score is not None and
-                check_threshold(word.word_score.prob)]  # this only takes first token prob into consideration
+                check_threshold(word.word_score.score)]  # this only takes first token prob into consideration
 
     def highlight_mistakes(self):
 
@@ -134,3 +199,12 @@ class PDFProcessor:
 
     def save(self, filename):
         self.doc.save(filename)
+
+
+if __name__ == '__main__':
+    pdf_processor = PDFProcessor('demo_data/demo.pdf')
+    sentences = pdf_processor.score_sentences()
+    pdf_processor.highlight_mistakes()
+    pdf_processor.save('demo_data/bert-processed-sample.pdf')
+    # sentences_strings = [pdf_processor.get_sentence_string(s) for s in sentences]
+    # print(sentences_strings)
