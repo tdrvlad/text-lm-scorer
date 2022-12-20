@@ -1,14 +1,16 @@
-from transformers import BertForMaskedLM, BertTokenizer
 import torch
-from typing import List
-from utils.scorer import TokenScore, TokenProb, WordScore, compute_score
-import itertools
+from transformers import BertForMaskedLM, BertTokenizer
+
+from utils.scorer import TokenScore, TokenProb, WordScore
+
 
 class Thresholds:
     HIGH = 0.1
     MED = 0.4
 
+
 top_k = 10
+
 
 class BERTScorer:
     def __init__(self, model_id='dumitrescustefan/bert-base-romanian-cased-v1'):
@@ -54,7 +56,6 @@ class BERTScorer:
                 mean_diff = torch.mean(probs_before - token_probability)
                 score = (score + (1 - mean_diff)) / 2
 
-
             token_index = (sorted_ids == input_id).nonzero().item()
 
             # top_k_strings = self.tokenizer.decode(sorted_ids[:5])
@@ -63,7 +64,8 @@ class BERTScorer:
             # top_k_probs = torch.topk(probabilities, top_k).values
             # top_k_strings = [self.tokenizer.decode(tk_id).replace(" ", "") for tk_id in top_k_ids]
             #
-            suggested_tokens = [TokenProb(token_id=tk_id, prob=prob) for tk_id, prob in zip(sorted_ids[:top_k], sorted_probs[:top_k])]
+            suggested_tokens = [TokenProb(token_id=tk_id, prob=prob) for tk_id, prob in
+                                zip(sorted_ids[:top_k], sorted_probs[:top_k])]
             #
             # rel_probs = top_k_probs - token_probability
             # abs_probs = torch.abs(rel_probs)
@@ -87,18 +89,18 @@ class BERTScorer:
         words = [w for w in text.split(' ') if len(w)]
         current_index = 0
         for word in words:
-            tokenized_word = self.tokenizer.encode(word)[1:-1] # Ignore BOS and EOS tokens
+            tokenized_word = self.tokenizer.encode(word)[1:-1]  # Ignore BOS and EOS tokens
             n_word_tokens = len(tokenized_word)
             current_word_token_scores = token_scores[current_index: current_index + n_word_tokens]
             word_score = WordScore(
                 string=word,
                 score=sum([ts.score for ts in current_word_token_scores]) / len(current_word_token_scores),
-                suggested_strings=[self.tokenizer.decode([tp.token_id]) for tp in current_word_token_scores[0].suggested_tokens]
+                suggested_strings=[self.tokenizer.decode([tp.token_id]) for tp in
+                                   current_word_token_scores[0].suggested_tokens]
             )
             word_scores.append(word_score)
             current_index += n_word_tokens
         return word_scores
-
 
     @staticmethod
     def high_threshold(prob):  # p < 0.8
@@ -125,6 +127,7 @@ def test_bert_scorer():
 
     word_scores = bert_scorer.score_text(text)
     print(word_scores)
+
 
 if __name__ == '__main__':
     test_bert_scorer()

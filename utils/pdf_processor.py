@@ -1,11 +1,10 @@
-from pydantic import BaseModel
-import fitz
-from utils.scorer import WordScore
+from typing import Tuple, List
 
-from utils.gpt_scorer import GPTScorer
+import fitz
+from pydantic import BaseModel
+
 from utils.bert_scorer import BERTScorer
-import itertools
-from typing import Union, Tuple, List
+from utils.scorer import WordScore
 
 
 class Color:
@@ -24,27 +23,23 @@ class WordObject(BaseModel):
 
     word_score: WordScore = None
 
-DELIMITERS = ['.', '...', '!', '?']
+
+PUNCTUATION_MARKS = ['.', '...', '!', '?']
 
 
-def word_ends_in_punctuation(word_obj: WordObject, punctuation=DELIMITERS):
-    """
-    Whether WordObject ends with a punctuation string.
-    """
-    # Case: word ends in punctuation
-    for punct in punctuation:
-        if word_obj.string.endswith(punct):
+def word_ends_in_punctuation(word: WordObject):
+    for punctuation_mark in PUNCTUATION_MARKS:
+        if word.string.endswith(punctuation_mark):
             return True
     return False
 
-def word_starts_with_capital_letter(word_obj: WordObject):
-    """
-    Whether WordObject starts with a capital letter.
-    """
-    return word_obj.string[0].isupper()
 
-def words_on_separate_lines(word_obj_1: WordObject, word_obj_2: WordObject):
-    return word_obj_1.paragraph_in_page != word_obj_2.paragraph_in_page
+def word_starts_with_capital_letter(word: WordObject):
+    return word.string[0].isupper()
+
+
+def words_on_separate_lines(word_1: WordObject, word_2: WordObject):
+    return word_1.paragraph_in_page != word_2.paragraph_in_page
 
 
 def sentence_split_words_condition(word_obj_1: WordObject, word_obj_2: WordObject):
@@ -64,17 +59,12 @@ def sentence_split_words_condition(word_obj_1: WordObject, word_obj_2: WordObjec
     return False
 
 
-class ScorerType:
-    BERT = 'BERT'
-    GPT = 'GPT'
-
-
 class PDFProcessor:
     filepath: str
     words: List[WordObject]
-    scorer: Union[GPTScorer, BERTScorer]
+    scorer: BERTScorer
 
-    def __init__(self, filepath: str, scorer: ScorerType = ScorerType.BERT):
+    def __init__(self, filepath: str):
         self.filepath = filepath
         self.doc = fitz.open(filepath)
         self.words = self.retrieve_words_data()
@@ -149,8 +139,6 @@ class PDFProcessor:
             for w, ws in zip(sentence, sentence_scores):
                 w.word_score = ws
 
-
-
     # def get_paragraphs(self):
     #     current_paragraph = self.words[0].paragraph_in_page
     #     paragraph_text = ''
@@ -167,7 +155,6 @@ class PDFProcessor:
     #     paragraphs.append(paragraph_text)  # append last paragraph
     #
     #     return paragraphs
-
 
     @staticmethod
     def prefix_in_word_buffered_uncased(word_buffer, prefix):
@@ -199,12 +186,3 @@ class PDFProcessor:
 
     def save(self, filename):
         self.doc.save(filename)
-
-
-if __name__ == '__main__':
-    pdf_processor = PDFProcessor('demo_data/demo.pdf')
-    sentences = pdf_processor.score_sentences()
-    pdf_processor.highlight_mistakes()
-    pdf_processor.save('demo_data/bert-processed-sample.pdf')
-    # sentences_strings = [pdf_processor.get_sentence_string(s) for s in sentences]
-    # print(sentences_strings)
