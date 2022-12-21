@@ -10,7 +10,3 @@ if __name__ == '__main__':
     sentences = pdf_processor.score_sentences()
     pdf_processor.highlight_mistakes()
     pdf_processor.save('demo_data/processed-sample.pdf')
-
-    # TODO: remove
-    # sentences_strings = [pdf_processor.get_sentence_string(s) for s in sentences]
-    # print(sentences_strings)
