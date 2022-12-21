@@ -1,7 +1,5 @@
 from utils.pdf_processor import PDFProcessor
 
-# TODO:
-#  * error if a paragraph is split on 2 pages currently
 
 if __name__ == '__main__':
     # pdf_processor = PDFProcessor('demo_data/demo.pdf')

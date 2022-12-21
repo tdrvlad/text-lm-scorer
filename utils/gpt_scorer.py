@@ -1,7 +1,7 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from typing import List
-from utils.scorer import TokenScore
+from utils.scorer import TokenProb
 
 
 class Thresholds:
@@ -9,6 +9,7 @@ class Thresholds:
     MED = 1e-05
 
 
+# Not used for now
 class GPTScorer:
     def __init__(self):
         self.model_id = 'readerbench/RoGPT2-medium'
@@ -29,7 +30,7 @@ class GPTScorer:
             token_scores = []
 
             # Probability for the first token cannot be computed since it is not proceeded by any token
-            first_token_score = TokenScore(
+            first_token_score = TokenProb(
                 token_id=token_ids[0],
                 string=token_strings[0]
             )
@@ -39,7 +40,7 @@ class GPTScorer:
                 suggested_tokens = torch.topk(prob, 5).indices
                 suggested_strings = [self.tokenizer.decode(suggested_token) for suggested_token in suggested_tokens]
 
-                token_scores.append(TokenScore(
+                token_scores.append(TokenProb(
                     token_id=token_id,
                     string=string,
                     prob=prob[token_id],

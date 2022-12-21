@@ -44,11 +44,9 @@ def in_different_paragraphs(current_word: WordObject, next_word: WordObject):
 
 
 def words_in_different_sentences(current_word: WordObject, next_word: WordObject):
-    """
-    Heuristic method for deciding whether there word1 and word2 belong to different sentences.
-    """
+    """ Heuristic method for deciding whether there word1 and word2 belong to different sentences."""
 
-    # Case: current word ends in punctuation AND following word starts with capital letter
+    # Case: current word ends in punctuation and following word starts with capital letter
     if ends_in_punctuation(current_word) and starts_with_capital_letter(next_word):
         return True
 
@@ -110,7 +108,7 @@ class PDFProcessor:
 
         for sentence_words in sentences:
             sentence_string = get_sentence_string(sentence_words)
-            sentence_scores = self.scorer.score_text(sentence_string)
+            sentence_scores = self.scorer.score_sentence(sentence_string)
 
             for word, word_score in zip(sentence_words, sentence_scores):
                 word.word_score = word_score
