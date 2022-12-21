@@ -10,6 +10,7 @@ from utils.scorer import WordScore
 class Color:
     RED = (1, 0, 0)
     YELLOW = (1, 1, 0)
+    GREEN = (0, 1, 0)
 
 
 class WordObject(BaseModel):
@@ -149,6 +150,12 @@ class PDFProcessor:
             med_mistake_words_quads = self.get_word_quads_with_probabilities(page.number, self.scorer.med_threshold)
             highlight = page.add_highlight_annot(med_mistake_words_quads)
             highlight.set_colors({"stroke": Color.YELLOW})
+            highlight.update()
+
+            # this is added just to highlight all else in green
+            low_mistake_words_quads = self.get_word_quads_with_probabilities(page.number, self.scorer.low_threshold)
+            highlight = page.add_highlight_annot(low_mistake_words_quads)
+            highlight.set_colors({"stroke": Color.GREEN})
             highlight.update()
 
     def get_scorer(self):

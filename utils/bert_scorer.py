@@ -103,12 +103,16 @@ class BERTScorer:
         return word_scores
 
     @staticmethod
-    def high_threshold(prob):  # p < 0.8
+    def high_threshold(prob):  # p <= 0.8
         return prob <= Thresholds.HIGH
 
     @staticmethod
-    def med_threshold(prob):  # 0.8 < p < 0.9
+    def med_threshold(prob):  # 0.8 < p <= 0.9
         return Thresholds.HIGH < prob <= Thresholds.MED
+
+    @staticmethod
+    def low_threshold(prob):  # 0.9 < p
+        return Thresholds.MED < prob
 
 
 def test_bert():
