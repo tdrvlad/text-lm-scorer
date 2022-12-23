@@ -59,29 +59,34 @@ class BERTScorer:
             token_probabilities.append(token_probability)
 
         # match token probabilities to words
-        word_scores = self.token_scores_to_word_scores(token_probabilities)
+        token_scores = self.token_scores_to_word_scores(token_probabilities)
 
-        return word_scores
+        return token_scores
 
     def token_scores_to_word_scores(self, token_scores):
-        word_scores = []
+        sentence_scores = []
+
         token_scores = token_scores[1:-1]  # Ignore BOS and EOS tokens
         text = self.tokenizer.decode([tkn_score.token_id for tkn_score in token_scores])
+        # split them (?) - still taking the token text - not the pdf one - shouldn't we have the pdf sentence here?
         words = [w for w in text.split(' ') if len(w)]
+
         current_index = 0
         for word in words:
             tokenized_word = self.tokenizer.encode(word)[1:-1]  # Ignore BOS and EOS tokens
             n_word_tokens = len(tokenized_word)
+
             current_word_token_scores = token_scores[current_index: current_index + n_word_tokens]
             word_score = WordScore(
                 string=word,
-                score=sum([ts.prob for ts in current_word_token_scores]) / len(current_word_token_scores),
+                score=sum([ts.prob for ts in current_word_token_scores]) / len(current_word_token_scores),  # mean
                 suggested_strings=[self.tokenizer.decode([tp.token_id]) for tp in
-                                   current_word_token_scores[0].suggested_tokens]
+                                   current_word_token_scores[0].suggested_tokens]  # first word suggestions only
             )
-            word_scores.append(word_score)
+            sentence_scores.append(word_score)
             current_index += n_word_tokens
-        return word_scores
+
+        return sentence_scores
 
     @staticmethod
     def high_threshold(prob):  # p <= 0.8
