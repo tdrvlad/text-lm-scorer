@@ -1,6 +1,6 @@
 import torch
 from transformers import BertForMaskedLM, BertTokenizer
-from utils.scorer import TokenProb, WordScore
+from utils.scorer import TokenScore
 
 
 class Thresholds:
@@ -31,62 +31,41 @@ class BERTScorer:
         logits_batch = torch.stack(logits_batch)
         tokens_logits = torch.diagonal(logits_batch).swapaxes(0, 1)
 
-        token_probabilities = []
+        token_scores = []
         for input_id, token_logits in zip(text_input_ids, tokens_logits):
             # retrieve sorted probabilities along with token probability
-            probabilities = torch.nn.functional.softmax(token_logits, dim=-1)
-            sorted_probs, sorted_ids = torch.sort(probabilities, descending=True)
-            original_token_probability = probabilities[input_id]
+            probs = torch.nn.functional.softmax(token_logits, dim=-1)
+            sorted_probs, sorted_ids = torch.sort(probs, descending=True)
+            original_token_prob = probs[input_id]
 
             # compute token score - based on better probabilities
             token_index = (sorted_ids == input_id).nonzero().item()
             probs_before = sorted_probs[:token_index]
-            updated_token_probability = original_token_probability
+            updated_token_prob = original_token_prob
             if len(probs_before):
-                mean_diff = torch.mean(probs_before - original_token_probability)
-                updated_token_probability = (updated_token_probability + (1 - mean_diff)) / 2
+                mean_diff = torch.mean(probs_before - original_token_prob)
+                updated_token_prob = (updated_token_prob + (1 - mean_diff)) / 2
 
-            # retrieve top k tokens & probabilities
-            suggested_tokens = [TokenProb(token_id=tk_id, prob=prob)
+            # retrieve top k tokens & scores
+            suggested_tokens = [TokenScore(token_id=tk_id, prob=prob)
                                 for tk_id, prob in zip(sorted_ids[:TOP_K_WORDS], sorted_probs[:TOP_K_WORDS])]
 
-            # create and append token probability
-            token_probability = TokenProb(
+            # create and append token score
+            token_score = TokenScore(
                 token_id=int(input_id),
-                prob=updated_token_probability,
+                prob=updated_token_prob,
                 suggested_tokens=suggested_tokens
             )
-            token_probabilities.append(token_probability)
-
-        # match token probabilities to words
-        token_scores = self.token_scores_to_word_scores(token_probabilities)
-
-        return token_scores
-
-    def token_scores_to_word_scores(self, token_scores):
-        sentence_scores = []
+            token_scores.append(token_score)
 
         token_scores = token_scores[1:-1]  # Ignore BOS and EOS tokens
-        text = self.tokenizer.decode([tkn_score.token_id for tkn_score in token_scores])
-        # split them (?) - still taking the token text - not the pdf one - shouldn't we have the pdf sentence here?
-        words = [w for w in text.split(' ') if len(w)]
+        return token_scores
 
-        current_index = 0
-        for word in words:
-            tokenized_word = self.tokenizer.encode(word)[1:-1]  # Ignore BOS and EOS tokens
-            n_word_tokens = len(tokenized_word)
+    def encode(self, string):
+        return self.tokenizer.encode(string)[1:-1]  # Ignore BOS and EOS tokens
 
-            current_word_token_scores = token_scores[current_index: current_index + n_word_tokens]
-            word_score = WordScore(
-                string=word,
-                score=sum([ts.prob for ts in current_word_token_scores]) / len(current_word_token_scores),  # mean
-                suggested_strings=[self.tokenizer.decode([tp.token_id]) for tp in
-                                   current_word_token_scores[0].suggested_tokens]  # first word suggestions only
-            )
-            sentence_scores.append(word_score)
-            current_index += n_word_tokens
-
-        return sentence_scores
+    def decode(self, token_id):
+        return self.tokenizer.decode([token_id])  # why in []?
 
     @staticmethod
     def high_threshold(prob):  # p <= 0.8

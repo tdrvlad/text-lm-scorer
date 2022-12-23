@@ -4,7 +4,7 @@ import fitz
 from pydantic import BaseModel
 
 from utils.bert_scorer import BERTScorer
-from utils.scorer import WordScore
+from utils.scorer import TokenScore
 
 
 class Color:
@@ -22,7 +22,9 @@ class WordObject(BaseModel):
     line_in_paragraph: int
     word_in_line: int
 
-    word_score: WordScore = None
+    word_score: float = None
+    suggested_strings: List[str] = None
+    tokens: List[TokenScore] = None
 
 
 PUNCTUATION_MARKS = ['.', '...', '!', '?']
@@ -108,10 +110,27 @@ class PDFProcessor:
 
         for sentence_words in sentences:
             sentence_string = get_sentence_string(sentence_words)
-            sentence_scores = self.scorer.score_sentence(sentence_string)
+            token_scores = self.scorer.score_sentence(sentence_string)
+            self.match_token_scores_against_words(token_scores, sentence_words)
 
-            for word, word_score in zip(sentence_words, sentence_scores):
-                word.word_score = word_score
+        return sentences
+
+    def match_token_scores_against_words(self, token_scores: List[TokenScore], sentence_words: List[WordObject]):
+        current_token_index = 0
+
+        for word_object in sentence_words:
+            tokenized_word = self.scorer.encode(word_object.string)
+
+            n_tokens_in_word = len(tokenized_word)
+            current_word_token_scores = token_scores[current_token_index: current_token_index + n_tokens_in_word]
+
+            # assign tokens score and suggestions to word our objects
+            word_object.word_score = sum([ts.prob for ts in current_word_token_scores]) / len(current_word_token_scores)
+            word_object.suggested_strings = [self.scorer.decode(tp.token_id) for tp in
+                                             current_word_token_scores[0].suggested_tokens]
+            word_object.tokens = current_word_token_scores
+
+            current_token_index += n_tokens_in_word
 
     def generate_sentences_as_list_of_words(self):
         """ Returns the pdf sentences as a list of lists of WordObjects."""
@@ -134,7 +153,7 @@ class PDFProcessor:
         return [word.quads for word in self.words
                 if word.page_in_doc == page and
                 word.word_score is not None and
-                check_threshold(word.word_score.score)]  # this only takes first token prob into consideration
+                check_threshold(word.word_score)]
 
     def highlight_mistakes(self):
         pages = self.doc.pages(start=None, stop=None)  # note: can't store pages inside the object
@@ -161,24 +180,6 @@ class PDFProcessor:
 
     def save(self, filename):
         self.doc.save(filename)
-
-    # TODO: double check this and remove
-    # def get_paragraphs(self):
-    #     current_paragraph = self.words[0].paragraph_in_page
-    #     paragraph_text = ''
-    #     paragraphs = []
-    #
-    #     for word in self.words:
-    #         if word.paragraph_in_page == current_paragraph:
-    #             paragraph_text += f' {word.string}'
-    #         else:
-    #             paragraphs.append(paragraph_text)
-    #             paragraph_text = word.string
-    #             current_paragraph = word.paragraph_in_page
-    #
-    #     paragraphs.append(paragraph_text)  # append last paragraph
-    #
-    #     return paragraphs
 
     # def get_wait_time(self):  # TODO: save this as a class attribute to save time
     #     return len(self.get_paragraphs()) - 1

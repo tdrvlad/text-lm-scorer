@@ -1,7 +1,7 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from typing import List
-from utils.scorer import TokenProb
+from utils.scorer import TokenScore
 
 
 class Thresholds:
@@ -30,7 +30,7 @@ class GPTScorer:
             token_scores = []
 
             # Probability for the first token cannot be computed since it is not proceeded by any token
-            first_token_score = TokenProb(
+            first_token_score = TokenScore(
                 token_id=token_ids[0],
                 string=token_strings[0]
             )
@@ -40,7 +40,7 @@ class GPTScorer:
                 suggested_tokens = torch.topk(prob, 5).indices
                 suggested_strings = [self.tokenizer.decode(suggested_token) for suggested_token in suggested_tokens]
 
-                token_scores.append(TokenProb(
+                token_scores.append(TokenScore(
                     token_id=token_id,
                     string=string,
                     prob=prob[token_id],
