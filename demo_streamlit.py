@@ -20,19 +20,15 @@ if uploaded_file:
     with open(tmp_file_path, "wb") as pdf_file:
         pdf_file.write(uploaded_file.getbuffer())
 
-    # TODO: continue from here
-    # 2. create scorer and get total time
-    sample_pdf = PDFProcessor(tmp_file_path)  # defaults to BERT
-    total_wait_time = sample_pdf.get_wait_time()
-
-    # 3. process file
-    my_bar = st.progress(0)
-    for percent_complete in sample_pdf.score_paragraphs(with_yield=True):
-        my_bar.progress(percent_complete/total_wait_time)
-
-    sample_pdf.highlight_mistakes()  # TODO: maybe move this in score_paragraphs?
+    # 2. create processed file path
     processed_file_path = os.path.join(temp_path, f'processed-{uploaded_file.name}')
-    sample_pdf.save(processed_file_path)
+
+    # 3. process file and save
+    with st.spinner('Wait for it...'):
+        sample_pdf = PDFProcessor(tmp_file_path)
+        sample_pdf.score_sentences()
+        sample_pdf.highlight_mistakes()
+        sample_pdf.save(processed_file_path)
 
     # 4. display Processed File when ready
     with open(processed_file_path, "rb") as f:

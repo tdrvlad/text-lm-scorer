@@ -52,7 +52,7 @@ def words_in_different_sentences(current_word: WordObject, next_word: WordObject
     if ends_in_punctuation(current_word) and starts_with_capital_letter(next_word):
         return True
 
-    # TODO: here you are not checking for separate lines but for separate paragraphs
+    # TODO: here you are not checking for separate lines but for separate paragraphs ()
     #  which one do you want? was called on_separate_lines before
     # Case: words are on separate lines and second word starts with capital letter
     if in_different_paragraphs(current_word, next_word) and starts_with_capital_letter(next_word):
@@ -180,22 +180,3 @@ class PDFProcessor:
 
     def save(self, filename):
         self.doc.save(filename)
-
-    # def get_wait_time(self):  # TODO: save this as a class attribute to save time
-    #     return len(self.get_paragraphs()) - 1
-
-    # def score_paragraphs(self, with_yield=False):
-    #     paragraphs = self.get_paragraphs()
-    #
-    #     all_word_scores = []
-    #     for index, paragraph in enumerate(paragraphs):
-    #         paragraph_scores = self.scorer.score_text(paragraph)
-    #         all_word_scores.extend(paragraph_scores)
-    #
-    #         if with_yield:
-    #             yield index
-    #
-    #     assert len(self.words) == len(all_word_scores), f'Different number of words and word scores: {len(self.words)} {len(all_word_scores)}'
-    #
-    #     for w, ws in zip(self.words, all_word_scores):
-    #         w.word_score = ws
